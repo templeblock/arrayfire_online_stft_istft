@@ -1,0 +1,6 @@
+[submodule "complex_double_binary_to_matlab"]
+	path = complex_double_binary_to_matlab
+	url = https://github.com/gogyzzz/complex_double_binary_to_matlab.git
+[submodule "cpp_buffer_to_wave"]
+	path = cpp_buffer_to_wave
+	url = https://github.com/gogyzzz/cpp_buffer_to_wave.git
