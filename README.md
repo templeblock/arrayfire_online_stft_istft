@@ -51,12 +51,13 @@ Short time fourier transform implemented arrayfire for online audio processing.
 ```
 ## result
 
+| stft in matlab | stft in arrayfire |
+|--|--|
+| ![](stft_in_matlab.png)     | ![](stft_in_arrayfire.png)    |
 
-+------------------+-------------------+
-| ![stft_in_arrayfirestft_in_arrayfire](stft_in_matlab.png)     | ![stft_in_arrayfire](stft_in_arrayfire.png)    |
-+------------------+-------------------+
-| ![stft_in_arrayfire](stft_in_matlab.png)    | ![stft_in_arrayfire](stft_in_matlab.png)    |
-+------------------+-------------------+
+| red: original raw data, blue: recostructed data" | reconstructed data lags behind 1 shift size |
+|--|--|
+| ![](red_origin_blue_reconstructed.png)    | ![](reconstructed_is_legged_1_shift_size.png)    |
 
 
 
