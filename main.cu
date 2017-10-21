@@ -139,7 +139,6 @@ int main(void)
         samples(af::span, i) = arr(nBlocks, (&buffer[i][0]), afHost).as(c32);
     }
     
-
     arr frame = af::constant(0.0f, nfreq, c32);
 
     af::timer::start();
