@@ -19,31 +19,34 @@ class stft_AF
 
     int sfft;
     int nch;
-    int soverlap;
-    int sfreq;
+    int sshift;
+    int nfreq;
     
-
     arr window;
-    
-    std::vector<double> vHanWinCoeff;
+    arr outWindow;
+
+    std::vector<double> vHanHalfWinCoeff;
+    arr hanHalfWinCoeff;
+
     arr hanWinCoeff;
 
 public:
 
-    stft_AF(const int sfft, const int nch, const int soverlap)
+    stft_AF(const int sfft, const int nch, const int sshift)
     {
         // make hanning window
-        initialize(sfft, nch, soverlap);
+        initialize(sfft, nch, sshift);
     }
 
-    void initialize(const int _sfft, const int _nch, const int _soverlap)
+    void initialize(const int _sfft, const int _nch, const int _sshift)
     {
         sfft = _sfft;
-        soverlap = _soverlap;
-        sfreq = _sfft / 2 + 1;
+        sshift = _sshift;
+        nfreq = _sfft / 2 + 1;
         nch = _nch;
 
         window = af::constant(0.0f, sfft, nch, c32);
+        outWindow = af::constant(0.0f, sfft, nch, f32);
 
         make_hanning_window();
     }
@@ -52,15 +55,18 @@ public:
     {
         std::cout << "make_hanning_window\n";
 
-        vHanWinCoeff.resize(sfft);
+        vHanHalfWinCoeff.resize(sfft/2+1);
         
-        std::cout << "make_hanning_window\n";
+        for (int sample = 0; sample < sfft/2 + 1; sample++)
+            vHanHalfWinCoeff[sample] = 0.5 * (1.0 - cos(2.0 * 3.14159265358979323846*(double)(sample) / ((double)sfft)));
 
-        for (int sample = 0; sample < sfft; sample++)
-            vHanWinCoeff[sample] = 0.5 * (1.0 - cos(2.0 * 3.14159265358979323846*(double)(sample) / ((double)sfft)));
+        hanWinCoeff = af::constant(0.0f, sfft, c32);
+        hanHalfWinCoeff = arr(sfft/2+1, &vHanHalfWinCoeff[0]).as(c32);
 
-        std::cout << "make_hanning_window\n";
-        hanWinCoeff = arr(sfft, 1, &vHanWinCoeff[0]).as(c32);
+        hanWinCoeff(seq(0, sfft / 2)) = hanHalfWinCoeff;
+        hanWinCoeff(seq(sfft / 2 + 1, sfft - 1, 1)) = hanHalfWinCoeff(seq(sfft / 2 - 1, 1, -1));
+
+        hanWinCoeff = sshift*hanWinCoeff / af::tile(af::sum(hanWinCoeff), sfft, 1);
     }
 
     ~stft_AF()
@@ -68,34 +74,40 @@ public:
 
     }
 
-    // in: time domain windowed. dim: (soverlap x nch)
-    // out: freq domain frame. dim: (sfreq x nch)
+    // in: time domain windowed. dim: (sshift x nch)
+    // out: freq domain frame. dim: (nfreq x nch)
     arr stft(arr& in)
     {
-        //std::cout << in.dims() << std::endl;
-        //std::cout << window.dims() << std::endl;
-
-        //std::cout << "sfft: " << sfft << std::endl;
-        //std::cout << "soverlap: " << soverlap << std::endl;
-        //
-
-        //std::cout << "here2\n";
         // shifting
-        window(seq(0, (sfft-soverlap-1)), af::span) = window(seq(soverlap, af::end), af::span);
-        //std::cout << "here2\n";
+        window(seq(0, (sfft-sshift-1)), af::span) = window(seq(sshift, af::end), af::span);
+        
         // copying new samples
-        window(seq((sfft - soverlap), af::end), af::span) = in;
-        //std::cout << "here2\n";        // batch windowing
+        window(seq((sfft - sshift), af::end), af::span) = in;
         arr windowed = af::batchFunc(window, hanWinCoeff, af::operator*);
-        //std::cout << "here2\n";
+        
         // batch fft
         arr fftd = af::fft(windowed, sfft);
-        //std::cout << "here2\n";
-        // return cropped last (1 + half) -> size: (sfft / 2 + 1)
-        //arr cropped = fftd(seq(0, sfreq), af::span);
 
-        return fftd(seq(0, sfreq-1), af::span);
+        // return cropped last (1 + half) -> size: (sfft / 2 + 1)
+        return fftd(seq(0, nfreq-1), af::span);
     }
+
+    // in: freq domain frame. dim: (nfreq x nch)
+    // out: time domain windowed. dim: (sshift x nch)
+    af::array istft(af::array& frame, const bool isEnd)
+    {
+        
+        //shifting
+        outWindow(seq(0, af::end - sshift), af::span) = outWindow(seq(sshift, af::end), af::span);
+        
+        outWindow(seq(af::end - sshift, af::end), af::span) = 0.0f;
+        
+        //adding
+        outWindow = outWindow + af::real(ifft(af::join(0, frame, af::conjg(frame(seq(af::end - 1, 1, -1), af::span)))));
+        
+        return outWindow(seq(0, sshift - 1), af::span);
+    }
+
 };
 
 
@@ -103,49 +115,63 @@ public:
 int main(void)
 {
     const int sfft = 512;
-    const int sfreq = sfft / 2+1;
+    const int nfreq = sfft / 2+1;
     const int soverlap = sfft / 2;
-
+    const int sshift = sfft - soverlap;
     const int nCh = 7;
 
-    stft_AF* pstft = new stft_AF(sfft, nCh, soverlap);
+    stft_AF* pstft = new stft_AF(sfft, nCh, sshift);
 
     float** buffer;
-    int nSamples = wm::wread("wav_7ch.wav", buffer);
+    int nBlocks = wm::wread("wav_7ch.wav", buffer);
 
-    int nbuffers = nSamples / soverlap;
+    int nbuffers = nBlocks / sshift;
 
-    //std::cout << "nbuffers: " << nbuffers << std::endl;
+    arr samples = af::constant(0.0f, nBlocks, nCh, c32);
 
-    arr frames = arr(sfreq, nCh, nbuffers, c32);
+    arr frames = af::constant(0.0f, nfreq, nCh, nbuffers, c32);
 
-    arr samples = af::constant(0.0f, nSamples, nCh, c32);
-    //std::cout << "herehere\n";
+    arr processed = af::constant(0.0f, nBlocks, nCh, f32);
+
+    
     for (int i = 0; i < nCh; i++)
     {
-        samples(af::span, i) = arr(nSamples, (&buffer[i][0]), afHost).as(c32);
+        samples(af::span, i) = arr(nBlocks, (&buffer[i][0]), afHost).as(c32);
     }
-    //std::cout << "herehere\n";
+    
+
+    arr frame = af::constant(0.0f, nfreq, c32);
 
     af::timer::start();
     for (int i = 0; i < nbuffers; i++)
     {
-        int start = i * soverlap;
-        //std::cout << "here\n";
-        arr arrived = samples(seq(start, start + soverlap - 1), af::span);
-        //std::cout << "here\n";
-        frames(af::span, af::span, i) = pstft->stft(arrived);
+        int start = i * sshift;
+        
+        arr arrived = samples(seq(start, start + sshift - 1), af::span);
+        
+        frame = pstft->stft(arrived);
+        frames(af::span, af::span, i) = frame;
+        processed(seq(start, start + sshift - 1), af::span) = pstft->istft(frame, false);
     }
     printf("elapsed seconds per 1 frame: %g\n", af::timer::stop() / (double)nbuffers);
 
+    float** ptr7ch = new float*[nCh];
 
-    //std::cout << "herehere\n";
-    af::write_complex64_binary(frames, "stfted");
-    
+    for (int i = 0; i < nCh; i++)
+        ptr7ch[i] = (processed(af::span, i)).host<float>();
+
+    wm::wwrite("ch7_processed.wav", ptr7ch, nBlocks, nCh);
+
+    processed.unlock();
 
     delete pstft;
 
     delete buffer;
+
+    for (int i = 0; i < nCh; i++)
+        delete ptr7ch[i];
+
+    delete ptr7ch;
 
     return 0;
 }
