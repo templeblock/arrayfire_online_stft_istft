@@ -1,34 +1,16 @@
 #pragma once
-#include <arrayfire.h>
 
-class stft_AF
+#include "arrayfire_stft.hpp"
+
+namespace af
 {
-    typedef af::array arr;
-    typedef af::dim4 dim4;
-    typedef af::seq seq;
-
-    int sfft;
-    int nch;
-    int sshift;
-    int nfreq;
-
-    arr window;
-    arr outWindow;
-
-    std::vector<double> vHanHalfWinCoeff;
-    arr hanHalfWinCoeff;
-
-    arr hanWinCoeff;
-
-public:
-
-    stft_AF(const int sfft, const int nch, const int sshift)
+    stft::stft(const int sfft, const int nch, const int sshift)
     {
         // make hanning window
         initialize(sfft, nch, sshift);
     }
 
-    void initialize(const int _sfft, const int _nch, const int _sshift)
+    void stft::initialize(const int _sfft, const int _nch, const int _sshift)
     {
         sfft = _sfft;
         sshift = _sshift;
@@ -41,14 +23,14 @@ public:
         make_hanning_window();
     }
 
-    void make_hanning_window()
+    void stft::make_hanning_window()
     {
         std::cout << "make_hanning_window\n";
 
         vHanHalfWinCoeff.resize(sfft / 2 + 1);
 
         for (int sample = 0; sample < sfft / 2 + 1; sample++)
-            vHanHalfWinCoeff[sample] = 0.5 * (1.0 - cos(2.0 * 3.14159265358979323846*(double)(sample) / ((double)sfft)));
+            vHanHalfWinCoeff[sample] = 0.5 * (1.0 - std::cos(2.0 * 3.14159265358979323846*(double)(sample) / ((double)sfft)));
 
         hanWinCoeff = af::constant(0.0f, sfft, c32);
         hanHalfWinCoeff = arr(sfft / 2 + 1, &vHanHalfWinCoeff[0]).as(c32);
@@ -59,14 +41,14 @@ public:
         hanWinCoeff = sshift*hanWinCoeff / af::tile(af::sum(hanWinCoeff), sfft, 1);
     }
 
-    ~stft_AF()
+    stft::~stft()
     {
 
     }
 
     // in: time domain windowed. dim: (sshift x nch)
     // out: freq domain frame. dim: (nfreq x nch)
-    arr stft(arr& in)
+    af::array stft::run(arr& in)
     {
         // shifting
         window(seq(0, (sfft - sshift - 1)), af::span) = window(seq(sshift, af::end), af::span);
@@ -84,7 +66,7 @@ public:
 
     // in: freq domain frame. dim: (nfreq x nch)
     // out: time domain windowed. dim: (sshift x nch)
-    af::array istft(af::array& frame, const bool isEnd)
+    af::array stft::inverse(af::array& frame, const bool isEnd)
     {
 
         //shifting
@@ -98,4 +80,6 @@ public:
         return outWindow(seq(0, sshift - 1), af::span);
     }
 
-};
+
+}
+    

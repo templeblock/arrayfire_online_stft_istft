@@ -2,7 +2,7 @@
 #define D_SCL_SECURE_NO_WARNINGS
 
 #pragma once
-#include "online_stft_arrayfire.hpp"
+#include "arrayfire_stft.hpp"
 #include "cpp_buffer_to_wave/WaveManager_revision\WaveManager.h"
 #include "complex_double_binary_to_matlab\binary2matlab_converter.hpp"
 
@@ -22,7 +22,7 @@ int main(void)
     const int sshift = sfft - soverlap;
     const int nCh = 7;
 
-    stft_AF* pstft = new stft_AF(sfft, nCh, sshift);
+    af::stft* pstft = new af::stft(sfft, nCh, sshift);
 
     float** buffer;
     int nBlocks = wm::wread("wav_7ch.wav", buffer);
@@ -50,9 +50,9 @@ int main(void)
         
         arr arrived = samples(seq(start, start + sshift - 1), af::span);
         
-        frame = pstft->stft(arrived);
+        frame = pstft->run(arrived);
         frames(af::span, af::span, i) = frame;
-        processed(seq(start, start + sshift - 1), af::span) = pstft->istft(frame, false);
+        processed(seq(start, start + sshift - 1), af::span) = pstft->inverse(frame, false);
     }
     printf("elapsed seconds per 1 frame: %g\n", af::timer::stop() / (double)nbuffers);
 
