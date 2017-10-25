@@ -48,7 +48,8 @@ namespace af
 
     // in: time domain windowed. dim: (sshift x nch)
     // out: freq domain frame. dim: (nfreq x nch)
-    af::array stft::run(arr& in)
+
+    af::array stft::run(arr in)
     {
         // shifting
         window(seq(0, (sfft - sshift - 1)), af::span) = window(seq(sshift, af::end), af::span);
@@ -66,7 +67,8 @@ namespace af
 
     // in: freq domain frame. dim: (nfreq x nch)
     // out: time domain windowed. dim: (sshift x nch)
-    af::array stft::inverse(af::array& frame, const bool isEnd)
+
+    af::array stft::inverse(af::array& frame)
     {
 
         //shifting
@@ -81,5 +83,21 @@ namespace af
     }
 
 
+	// in: freq domain frames. dim: (nfreq x nframes x nch)
+	// out: time signal. dim: (nsamples x nch)
+	af::array stft::batch_inverse(af::array batch)
+	{
+		const int nframes = batch.dims(1);
+
+		//cout << batch.dims() << endl;
+		af::array out = af::constant(0.0f, sshift * nframes, nch, f32);
+
+		for (size_t i = 0; i < nframes; i++)
+		{
+			out(seq(i * sshift, (i + 1)*sshift - 1), af::span) = inverse(arr(batch(af::span, i, af::span),nfreq, nch));
+		}
+
+		return out;
+	}
 }
-    
+

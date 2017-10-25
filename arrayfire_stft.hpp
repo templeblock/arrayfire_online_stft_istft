@@ -34,11 +34,12 @@ namespace af
 
         // in: time domain windowed. dim: (sshift x nch)
         // out: freq domain frame. dim: (nfreq x nch)
-        arr run(arr& in);
+        arr run(arr in);
 
         // in: freq domain frame. dim: (nfreq x nch)
         // out: time domain windowed. dim: (sshift x nch)
-        arr inverse(arr& frame, const bool isEnd);
+        arr inverse(arr& frame);
 
+		arr batch_inverse(arr batch);
     };
 }
